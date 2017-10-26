@@ -1,0 +1,452 @@
+diff --git a/arch/x86/kvm/x86.c b/arch/x86/kvm/x86.c
+index 7ffc224..f9b6c9a 100644
+--- a/arch/x86/kvm/x86.c
++++ b/arch/x86/kvm/x86.c
+@@ -141,6 +141,11 @@ struct kvm_shared_msrs {
+ 	} values[KVM_NR_SHARED_MSRS];
+ };
+ 
++
++static unsigned int counter_value_eax=0;
++EXPORT_SYMBOL_GPL(counter_value_eax);
++
++
+ static struct kvm_shared_msrs_global __read_mostly shared_msrs_global;
+ static struct kvm_shared_msrs __percpu *shared_msrs;
+ 
+@@ -5873,9 +5878,18 @@ static void kvm_pv_kick_cpu_op(struct kvm *kvm, unsigned long flags, int apicid)
+ 
+ int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
+ {
+-	unsigned long nr, a0, a1, a2, a3, ret;
++	printk("jsingh1:test");
++	unsigned long nr, a0, a1, a2, a3, ret, rbx2 = 0x0; //added a variable for GETMEMSTATS
++	u32 function, eax, ebx, ecx, edx;
+ 	int op_64_bit, r = 1;
+ 
++	//Variables for GETMEMSTATS
++	unsigned long rflag_val2 = kvm_get_rflags(vcpu);
++	unsigned long max_mem = 0x0, start_mem = 0x0, gpa2 = 0x0;
++	int access = 0;
++	//-----------------------------------
++
++	printk("jsingh1:test");
+ 	kvm_x86_ops->skip_emulated_instruction(vcpu);
+ 
+ 	if (kvm_hv_hypercall_enabled(vcpu->kvm))
+@@ -5888,6 +5902,13 @@ int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
+ 	a3 = kvm_register_read(vcpu, VCPU_REGS_RSI);
+ 
+ 	trace_kvm_hypercall(nr, a0, a1, a2, a3);
++	
++	printk("jsingh1:test nr value");
++	printk(KERN_NOTICE "data_nr:0x%x\n ", (unsigned int)(nr));//0xf3b
++
++	//u64 new_bv = kvm_read_edx_eax(vcpu);
++	//printk(KERN_NOTICE "data_new_bv:0x%x\n ", (unsigned int)(new_bv));
++	
+ 
+ 	op_64_bit = is_64_bit_mode(vcpu);
+ 	if (!op_64_bit) {
+@@ -5897,13 +5918,17 @@ int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
+ 		a2 &= 0xFFFFFFFF;
+ 		a3 &= 0xFFFFFFFF;
+ 	}
++	printk(KERN_INFO "data:0x%x\n ", (unsigned int)(a0));//0xc015e000
++	printk(KERN_INFO "data:0x%x\n ", (unsigned int)(a1));//0x0
++	printk(KERN_INFO "data:0x%x\n ", (unsigned int)(a2));//0x0
++	printk(KERN_INFO "data:0x%x\n ", (unsigned int)(a3));//0x96
+ 
+ 	if (kvm_x86_ops->get_cpl(vcpu) != 0) {
+ 		ret = -KVM_EPERM;
+ 		goto out;
+ 	}
+ 
+-	switch (nr) {
++	switch (nr & 0xFFFFFFFF) {
+ 	case KVM_HC_VAPIC_POLL_IRQ:
+ 		ret = 0;
+ 		break;
+@@ -5911,14 +5936,362 @@ int kvm_emulate_hypercall(struct kvm_vcpu *vcpu)
+ 		kvm_pv_kick_cpu_op(vcpu->kvm, a0, a1);
+ 		ret = 0;
+ 		break;
++	case 0x0F3B:
++		printk("jsingh1_test1:test NEWCPUID");
++		printk(KERN_NOTICE "data_nr:0x%x\n ", (unsigned int)(nr));
++
++		unsigned long eax2 = (u32) (nr >> 32);
++		printk(KERN_NOTICE "data_eax1:0x%x\n ", (unsigned int)(eax2));
++
++		eax2 &= 0xFFFFFFFF;
++		printk(KERN_NOTICE "data_eax1:0x%x\n ", (unsigned int)(eax2));
++
++		kvm_register_write(vcpu, VCPU_REGS_RAX, eax2);
++		unsigned long rax2 = kvm_register_read(vcpu, VCPU_REGS_RAX);
++		printk(KERN_NOTICE "data_rax1:0x%x\n ", (unsigned int)(rax2));
++
++		printk("jsingh1_function_call_start");
++		//kvm_emulate_cpuid(vcpu);
++
++		//eax = kvm_register_read(vcpu, VCPU_REGS_RAX);
++		//printk(KERN_INFO "cpuid_data_orignal:0x%x\n ", (unsigned int)(eax));
++		
++		//ecx = kvm_register_read(vcpu, VCPU_REGS_RCX);
++		function = eax = kvm_register_read(vcpu, VCPU_REGS_RAX);
++		printk(KERN_INFO "Hypercall - cpuid_data_orignal:0x%x\n ", (unsigned int)(eax));
++
++		ecx = kvm_register_read(vcpu, VCPU_REGS_RCX);
++		kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx);
++	
++		printk(KERN_INFO "Hypercall - cpuid_data:0x%x\n ", (unsigned int)(ebx));//0x0
++		printk(KERN_INFO "Hypercall - cpuid_data:0x%x\n ", (unsigned int)(ecx));//0x0
++		//printk(KERN_INFO "cpuid_data:0x%x\n ", (unsigned int)(edx));//0x96
++	
++		printk("Hypercall - All value write successful Step1");
++		kvm_register_write(vcpu, VCPU_REGS_RAX, eax);
++		printk("Hypercall - All value write successful EAX");
++		kvm_register_write(vcpu, VCPU_REGS_RBX, ebx);
++		printk("Hypercall - All value write successful EBX");	
++		kvm_register_write(vcpu, VCPU_REGS_RCX, ecx);
++		printk("Hypercall - All value write successful ECX");	
++		kvm_register_write(vcpu, VCPU_REGS_RDX, edx);
++		printk("Hypercall - All value write successful EDX");
++
++		printk("jsingh1_function_call_completed");
++		ret = 0;
++		//return r;
++		break;
++	case 0x0F3C:
++		printk("jsingh1_test1:test NEWCPUID2");
++		printk(KERN_NOTICE "data_nr:0x%x\n ", (unsigned int)(nr));
++
++		eax2 = (u32) (nr >> 32);
++		printk(KERN_NOTICE "data_eax1:0x%x\n ", (unsigned int)(eax2));
++
++		eax2 &= 0xFFFFFFFF;
++		printk(KERN_NOTICE "data_eax1:0x%x\n ", (unsigned int)(eax2));
++
++		kvm_register_write(vcpu, VCPU_REGS_RAX, eax2);
++		rax2 = kvm_register_read(vcpu, VCPU_REGS_RAX);
++		printk(KERN_NOTICE "data_rax1:0x%x\n ", (unsigned int)(rax2));
++
++		printk("jsingh1_function_call_start");
++
++
++		//kvm_emulate_cpuid(vcpu);
++
++		//eax = kvm_register_read(vcpu, VCPU_REGS_RAX);
++		//printk(KERN_INFO "cpuid_data_orignal:0x%x\n ", (unsigned int)(eax));
++		//u32 function, eax, ebx, ecx, edx;
++		//ecx = kvm_register_read(vcpu, VCPU_REGS_RCX);
++		function = eax = kvm_register_read(vcpu, VCPU_REGS_RAX);
++		printk(KERN_INFO "Hypercall - cpuid_data_orignal:0x%x\n ", (unsigned int)(eax));
++
++		ecx = kvm_register_read(vcpu, VCPU_REGS_RCX);
++		kvm_cpuid(vcpu, &eax, &ebx, &ecx, &edx);
++	
++		printk(KERN_INFO "Hypercall - cpuid_data:0x%x\n ", (unsigned int)(ebx));//0x0
++		printk(KERN_INFO "Hypercall - cpuid_data:0x%x\n ", (unsigned int)(ecx));//0x0
++			//printk(KERN_INFO "cpuid_data:0x%x\n ", (unsigned int)(edx));//0x96
++		
++		//long nbytes;
++   		//char *ebxCopy;
++		//char eaxStr[] = "CMPE";
++		//char ebxStr[] = "283";
++   		//unsigned char *eaxData;
++		//unsigned char *ebxData;
++		//eaxData = (unsigned char*)eaxStr;
++		//ebxData = (unsigned char*)ebxStr;
++		//nbytes = strlen(ebxStr);
++  
++   		/* Convert bytes to a zero-terminated string */
++   		//ebxCopy = kmalloc(nbytes + 1, GFP_KERNEL);
++   		//memcpy(ebxCopy, ebxData, nbytes);
++   		//ebxCopy[nbytes] = '\0';
++   		//printk("'%s'\n", ebxCopy);
++
++		//static const char signature[12] = "KVMKVMKVM\0\0";
++		//const u32 *sigptr = (const u32 *)signature;
++		//vcpu->eax = KVM_CPUID_FEATURES;
++		//vcpu->ebx = sigptr[0];
++		//entry->ecx = sigptr[1];
++		//entry->edx = sigptr[2];	
++			
++		//struct kvm_cpuid_entry2 *entry;
++
++		printk("Hypercall - All value write successful Step1");
++		//entry->eax = eaxData;
++		if (eax2==0xA0000000) {
++			kvm_register_write(vcpu, VCPU_REGS_RAX, 0x45504d43);
++			printk("Hypercall - All value write successful EAX");
++		//entry->ebx = ebxCopy;
++			kvm_register_write(vcpu, VCPU_REGS_RBX, 0x00333832);
++			printk("Hypercall - All value write successful EBX");
++		}
++
++		else {
++			kvm_register_write(vcpu, VCPU_REGS_RAX, 0x45504d43);
++			printk("Hypercall - All value write successful EAX");
++			//entry->ebx = ebxCopy;
++			kvm_register_write(vcpu, VCPU_REGS_RBX, 0x00333832);
++			printk("Hypercall - All value write successful EBX");
++		}
++			
++		kvm_register_write(vcpu, VCPU_REGS_RCX, ecx);
++		printk("Hypercall - All value write successful ECX");	
++		kvm_register_write(vcpu, VCPU_REGS_RDX, edx);
++		printk("Hypercall - All value write successful EDX");
++
++		printk("jsingh1_function_call_completed");
++		ret = 0;
++		//return r;
++		break;
++	case 0x0F3D:
++		//unsigned long nr;
++		//nr = kvm_register_read(vcpu, VCPU_REGS_RAX);
++		//if((nr & 0xFFFFFFFF) == 0x0F3D) {
++		printk("incrementing..");
++		counter_value_eax = counter_value_eax + 1;
++		// //}
++		kvm_register_write(vcpu, VCPU_REGS_RAX, counter_value_eax);
++		printk("jsingh1_function_call_completed");
++		ret = 0;
++		break;
++	case 0x0F3E:
++		printk("A Case Of 0x0F3E");
++		printk("The VCPUID is : %d",vcpu->vcpu_id);
++		eax2 = (u32) (nr >> 32);
++		printk(KERN_NOTICE "data_eax1:0x%x\n ", (unsigned int)(eax2));
++
++		eax2 &= 0xFFFFFFFF;
++		printk(KERN_NOTICE "data_eax1:0x%x\n ", (unsigned int)(eax2));
++		//struct kvm_regs *regs;
++		printk(KERN_NOTICE "rFLAG1:0x%x\n ", (unsigned int)(kvm_get_rflags(vcpu)));
++
++		unsigned long rflag_val;
++		rflag_val = kvm_get_rflags(vcpu);
++
++		if(eax2 == 0xFFFFFFFF){
++			printk("EAX is 0xFFFFFFFF." );
++			vcpu->getctr2_counter = 0;
++			printk("Counter successfully set to 0");
++			// vcpu->getctr2_counter = eax2; // For testing the wrapping corner case
++			// vcpu->getctr2_counter += 1;
++			printk("vcpu->getctr2_counter = 0x%x",vcpu->getctr2_counter);
++			// Set RFLAG.ZF
++			rflag_val |= 1 << 6;
++			kvm_set_rflags(vcpu, rflag_val);
++			printk(KERN_NOTICE "rFLAG1:0x%x\n ", (unsigned int)(kvm_get_rflags(vcpu)));
++
++
++			printk("RFLAGS.ZF set success");
++			printk("RFLAGS write success");
++			
++		}
++		else{
++			vcpu->getctr2_counter += 1;
++			if(vcpu->getctr2_counter == 0){
++				// Set RFLAG.ZF
++				rflag_val |= 1 << 6;
++				printk("RFLAGS.ZF set success");
++				// Set RFLAG.OF
++				rflag_val |= 1 << 11;
++				printk("RFLAGS.OF set success");
++				kvm_set_rflags(vcpu, rflag_val);
++				printk("RFLAGS write success");
++			}
++			else{
++				// Reset RFLAG.ZF
++				rflag_val &= ~(1 << 6);
++				printk("RFLAGS.ZF reset success");
++				// Clear RFLAG.OF
++				rflag_val &= ~(1 << 11);
++				printk("RFLAGS.OF clear success");
++				kvm_set_rflags(vcpu, rflag_val);
++				printk("RFLAGS write success");
++			}
++		}
++		// Write the value of counter to RAX
++		kvm_register_write(vcpu, VCPU_REGS_RAX, vcpu->getctr2_counter);
++		printk("Successfully written the GETCTR2 counter to RAX");
++		ret = 0;
++		break;
++	
++	case 0x0F3F: // LOADCTR
++		printk("A case of 0x0F3F");
++		printk("The VCP's ID is : %d", vcpu->vcpu_id);
++		eax2 = (u32) (nr >> 32);
++		printk(KERN_NOTICE "data_eax1:0x%x\n ", (unsigned int)(eax2));
++
++		eax2 &= 0xFFFFFFFF;
++		printk(KERN_NOTICE "data_eax1:0x%x\n ", (unsigned int)(eax2));
++		printk("VCPU counter before setting : 0x%x",vcpu->getctr2_counter);
++
++		vcpu->getctr2_counter = eax2;
++		printk("VCPU counter succesfully set.");
++		printk("VCPU counter after setting : 0x%x",vcpu->getctr2_counter);
++
++		// Write the value of counter to RAX
++		kvm_register_write(vcpu, VCPU_REGS_RAX, vcpu->getctr2_counter);
++		printk("Successfully written the GETCTR2 counter to RAX");
++		ret = 0;
++		break;
++
++	case 0x0F24: // LOADCTR %EBX
++		printk("A case of 0x0F24");
++		printk("The VCP's ID is : %d", vcpu->vcpu_id);
++		unsigned long ebx2 = (u32) a0;
++		printk(KERN_NOTICE "data_ebx2:0x%x\n ", (unsigned int)(ebx2));
++
++		ebx2 &= 0xFFFFFFFF;
++		printk(KERN_NOTICE "data_ebx2:0x%x\n ", (unsigned int)(ebx2));
++		printk("VCPU counter before setting : 0x%x",vcpu->getctr2_counter);
++
++		vcpu->getctr2_counter = ebx2;
++		printk("VCPU counter succesfully set.");
++		printk("VCPU counter after setting : 0x%x",vcpu->getctr2_counter);
++
++		// Write the value of counter to RAX
++		kvm_register_write(vcpu, VCPU_REGS_RAX, vcpu->getctr2_counter);
++		printk("Successfully written the GETCTR2 counter to RAX");
++		ret = 0;
++		break;
++
++	case 0x0F25: //LOADCTR %ECX
++		printk("A case of 0x0F25");
++		printk("The VCP's ID is : %d", vcpu->vcpu_id);
++		unsigned long ecx2 = (u32) a1;
++		printk(KERN_NOTICE "data_ecx2:0x%x\n ", (unsigned int)(ecx2));
++
++		ecx2 &= 0xFFFFFFFF;
++		printk(KERN_NOTICE "data_ecx2:0x%x\n ", (unsigned int)(ecx2));
++		printk("VCPU counter before setting : 0x%x",vcpu->getctr2_counter);
++
++		vcpu->getctr2_counter = ecx2;
++		printk("VCPU counter succesfully set.");
++		printk("VCPU counter after setting : 0x%x",vcpu->getctr2_counter);
++
++		// Write the value of counter to RAX
++		kvm_register_write(vcpu, VCPU_REGS_RAX, vcpu->getctr2_counter);
++		printk("Successfully written the GETCTR2 counter to RAX");
++		ret = 0;
++		break;
++
++	case 0x0F26: //LOADCTR %EDX
++		printk("A case of 0x0F26");
++		printk("The VCP's ID is : %d", vcpu->vcpu_id);
++		unsigned long edx2 = (u32) a2;
++		printk(KERN_NOTICE "data_edx2:0x%x\n ", (unsigned int)(edx2));
++
++		edx2 &= 0xFFFFFFFF;
++		printk(KERN_NOTICE "data_edx2:0x%x\n ", (unsigned int)(edx2));
++		printk("VCPU counter before setting : 0x%x",vcpu->getctr2_counter);
++
++		vcpu->getctr2_counter = edx2;
++		printk("VCPU counter succesfully set.");
++		printk("VCPU counter after setting : 0x%x",vcpu->getctr2_counter);
++
++		// Write the value of counter to RAX
++		kvm_register_write(vcpu, VCPU_REGS_RAX, vcpu->getctr2_counter);
++		printk("Successfully written the GETCTR2 counter to RAX");
++		ret = 0;
++		break;
++
++	case 0x0F27: // LOADCTR *(%RSI)
++		printk("A case of 0x0F27");
++		printk("The VCPU's ID is : %d", vcpu->vcpu_id);
++		printk("vcpu->getctr2_counter before setting : 0x%x",vcpu->getctr2_counter);
++		unsigned int field_value;
++		struct x86_exception e;
++		// Read the value stored at address stored in a3.
++		int guest_virt_ret = kvm_read_guest_virt(&vcpu->arch.emulate_ctxt, a3, &field_value, sizeof(field_value), &e);
++		if(guest_virt_ret == X86EMUL_CONTINUE){
++			printk("kvm_read_guest_virt sucess! Returns : %d",guest_virt_ret);
++		}
++		else{
++			if(guest_virt_ret == X86EMUL_IO_NEEDED){
++			printk("kvm_read_guest_virt fail! Page Fault occured Returns : %d",guest_virt_ret);
++			//kvm_inject_page_fault(vcpu, &e);
++		}
++		}
++		// vcpu->getctr2_counter = value
++		vcpu->getctr2_counter = field_value;
++		printk("Write to vcpu->getctr2 success.");
++		printk("vcpu->getctr2_counter after setting : 0x%x",vcpu->getctr2_counter);
++
++		// Write the value of counter to RAX
++		kvm_register_write(vcpu, VCPU_REGS_RAX, vcpu->getctr2_counter);
++		printk("Successfully written the GETCTR2 counter to RAX");
++		ret = 0;
++		break;
++
++	case 0x0F39:		
++		// eax2 = (u32) (nr >> 32);
++		// printk(KERN_NOTICE "data_eax2:0x%x\n ", (unsigned int)(eax2));
++		// eax2 &= 0xFFFFFFFF;
++		// printk(KERN_NOTICE "data_eax2:0x%x\n ", (unsigned int)(eax2));
++
++		printk(KERN_NOTICE "Old rflag value :0x%x\n ", (unsigned int)(kvm_get_rflags(vcpu)));
++
++		rbx2 = (unsigned long) kvm_register_read(vcpu, VCPU_REGS_RBX);
++		printk(KERN_NOTICE "Value of RBX before operation: %lu\n", kvm_register_read(vcpu, VCPU_REGS_RBX));
++		
++		// if(rbx2 > 0xFFFFFFFFFFFFF) { 
++		// 	rflag_val2 |= 1 << 11;
++		// 	printk("RFLAGS.OF set successfully\n");
++		// 	kvm_set_rflags(vcpu, rflag_val2);
++		// 	printk(KERN_NOTICE "New rflag value after overflow:0x%x\n ", (unsigned int)(kvm_get_rflags(vcpu)));
++		// 	printk(KERN_NOTICE "Value of RBX after 'if loop' operation is same: %lu\n", kvm_register_read(vcpu, VCPU_REGS_RBX));
++		// }
++
++		// else {
++			max_mem = (unsigned long) (rbx2 << 12);
++			printk(KERN_NOTICE "max_mem value is %lu\n:", max_mem);
++			rflag_val2 &= ~(1 << 11);
++			printk("RFLAGS.OF cleared successfully\n");
++			
++			kvm_set_rflags(vcpu, rflag_val2);
++			printk(KERN_NOTICE "New rflag value after overflow clear:0x%x\n ", (unsigned int)(kvm_get_rflags(vcpu)));
++			
++			start_mem = (unsigned long) kvm_read_cr3(vcpu);
++			printk(KERN_NOTICE " The value of start_memory is: %lu", start_mem);
++
++			gpa2 = (gpa_t) kvm_mmu_gva_to_gpa_read(vcpu,start_mem, &e);
++			printk(KERN_NOTICE " The value of gpa is: %lu", gpa2);
++		// }
++		break;
+ 	default:
++		printk("jsingh1: In default");
+ 		ret = -KVM_ENOSYS;
+ 		break;
+ 	}
+ out:
++	printk("jsingh1: outcall");
+ 	if (!op_64_bit)
+ 		ret = (u32)ret;
+-	kvm_register_write(vcpu, VCPU_REGS_RAX, ret);
++	printk("jsingh1_outcall: ");
++	//kvm_register_write(vcpu, VCPU_REGS_RAX, ret);
++	printk("jsingh1_ret:0x%x\n ", (unsigned int)(ret));
+ 	++vcpu->stat.hypercalls;
+ 	return r;
+ }
+diff --git a/include/linux/kvm_host.h b/include/linux/kvm_host.h
+index c923350..89570e0 100644
+--- a/include/linux/kvm_host.h
++++ b/include/linux/kvm_host.h
+@@ -247,9 +247,14 @@ struct kvm_vcpu {
+ 	struct pid *pid;
+ 	int sigset_active;
+ 	sigset_t sigset;
++
++
++
++
+ 	struct kvm_vcpu_stat stat;
+ 	unsigned int halt_poll_ns;
+ 
++        unsigned int getctr2_counter;
+ #ifdef CONFIG_HAS_IOMEM
+ 	int mmio_needed;
+ 	int mmio_read_completed;
